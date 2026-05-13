@@ -1,0 +1,212 @@
+/* ═══════════════════════════════════════════
+   Soul Lab — UI Components
+   ═══════════════════════════════════════════ */
+
+/* ─── Navigation ─── */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--sp-xl);
+  z-index: var(--z-nav);
+  background: var(--c-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 0.5px solid var(--c-glass-border);
+  transition: background var(--duration-normal) var(--ease-out);
+}
+
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+
+.nav-logo {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--c-accent);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.nav-logo:hover {
+  transform: rotate(90deg);
+}
+
+.nav-brand {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--c-text);
+}
+
+.nav-brand-sub {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--c-text-3);
+  letter-spacing: 0.04em;
+}
+
+.nav-center {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+
+.nav-pill {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--c-border);
+  color: var(--c-text-2);
+  transition: all var(--duration-fast) var(--ease-out);
+  text-transform: uppercase;
+}
+.nav-pill:hover {
+  color: var(--c-text);
+  border-color: var(--c-text-3);
+  background: var(--c-bg-hover);
+}
+.nav-pill.active {
+  color: var(--c-bg);
+  background: var(--c-text);
+  border-color: var(--c-text);
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+}
+
+.nav-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--c-accent);
+  letter-spacing: 0.06em;
+}
+
+.nav-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  color: var(--c-text-2);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.nav-icon-btn:hover {
+  color: var(--c-text);
+  background: var(--c-bg-hover);
+}
+
+/* ─── Buttons ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 10px 24px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--c-border);
+  color: var(--c-text);
+  background: transparent;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--c-bg-hover);
+  border-color: var(--c-text-3);
+}
+
+.btn-primary {
+  background: var(--c-text);
+  color: var(--c-bg);
+  border-color: var(--c-text);
+}
+.btn-primary:hover {
+  opacity: 0.85;
+  background: var(--c-text);
+}
+
+.btn-oc {
+  border-color: var(--c-oc-border);
+  color: var(--c-oc);
+}
+.btn-oc:hover {
+  background: var(--c-oc-bg);
+  border-color: var(--c-oc);
+}
+
+.btn-card {
+  border-color: var(--c-card-border);
+  color: var(--c-card);
+}
+.btn-card:hover {
+  background: var(--c-card-bg);
+  border-color: var(--c-card);
+}
+
+/* ─── Cards ─── */
+.card {
+  background: var(--c-bg-card);
+  border: 0.5px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-xl);
+  box-shadow: var(--shadow-card);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+.card:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--c-border-2);
+}
+
+/* ─── Section Labels (editorial style) ─── */
+.section-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-text-3);
+  margin-bottom: var(--sp-lg);
+}
+
+/* ─── Decorative Line ─── */
+.line {
+  height: 0.5px;
+  background: var(--c-border);
+  width: 100%;
+}
+
+/* ─── Tag / Badge ─── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 0.5px solid var(--c-border);
+  color: var(--c-text-2);
+}
