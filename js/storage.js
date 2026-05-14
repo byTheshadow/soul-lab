@@ -124,3 +124,82 @@ const Storage = (() => {
   };
 })();
 /* ═══ END: Storage ═══ */
+// 在 storage.js 末尾添加
+
+/* ═══════════════════════════════════════════
+   Card Workshop Drafts
+   ═══════════════════════════════════════════ */
+
+const DRAFTS_KEY = 'soul_lab_card_drafts';
+const MAX_DRAFTS = 3;
+
+const DraftStorage = {
+  // 获取所有草稿
+  getAll() {
+    const data = localStorage.getItem(DRAFTS_KEY);
+    return data ? JSON.parse(data) : [];
+  },
+
+  // 保存所有草稿
+  saveAll(drafts) {
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+  },
+
+  // 创建新草稿
+  create(mode) {
+    const drafts = this.getAll();
+    if (drafts.length >= MAX_DRAFTS) {
+      return null; // 超出上限
+    }
+
+    const draft = {
+      id: `draft_${Date.now()}`,
+      title: `草稿${drafts.length + 1}`,
+      mode: mode, // "inspiration" | "existing"
+      sourceText: '',
+      messages: [],
+      worldbookStash: [],
+      highlights: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    drafts.push(draft);
+    this.saveAll(drafts);
+    return draft;
+  },
+
+  // 获取单个草稿
+  get(id) {
+    const drafts = this.getAll();
+    return drafts.find(d => d.id === id);
+  },
+
+  // 更新草稿
+  update(id, updates) {
+    const drafts = this.getAll();
+    const index = drafts.findIndex(d => d.id === id);
+    if (index === -1) return false;
+
+    drafts[index] = {
+      ...drafts[index],
+      ...updates,
+      updatedAt: Date.now()
+    };
+    this.saveAll(drafts);
+    return true;
+  },
+
+  // 删除草稿
+  delete(id) {
+    const drafts = this.getAll();
+    const filtered = drafts.filter(d => d.id !== id);
+    this.saveAll(filtered);
+    return true;
+  },
+
+  // 重命名草稿
+  rename(id, newTitle) {
+    return this.update(id, { title: newTitle });
+  }
+};

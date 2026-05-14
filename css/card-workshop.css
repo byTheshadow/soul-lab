@@ -1,0 +1,522 @@
+/* ═══════════════════════════════════════════
+   Card Workshop Styles
+   ═══════════════════════════════════════════ */
+
+.card-workshop {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--nav-height) - var(--footer-height));
+  background: var(--c-bg);
+}
+
+/* ─── 空状态 ─── */
+.card-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--sp-lg);
+}
+
+.empty-icon {
+  font-size: 64px;
+  color: var(--c-text-3);
+}
+
+.empty-title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.empty-desc {
+  font-size: var(--text-md);
+  color: var(--c-text-2);
+}
+
+/* ─── 顶部栏 ─── */
+.card-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-md) var(--sp-xl);
+  border-bottom: 0.5px solid var(--c-border);
+  background: var(--c-bg-card);
+}
+
+.card-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+}
+
+.card-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--c-border);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.card-tab:hover {
+  background: var(--c-bg-hover);
+  border-color: var(--c-text-3);
+}
+
+.card-tab.active {
+  background: var(--c-text);
+  color: var(--c-bg);
+  border-color: var(--c-text);
+}
+
+.card-tab-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.card-tab-close {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  opacity: 0.6;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.card-tab-close:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.card-tab.active .card-tab-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.card-tab-new {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 0.5px dashed var(--c-border);
+  color: var(--c-text-3);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.card-tab-new:hover {
+  color: var(--c-text);
+  border-color: var(--c-text-3);
+  background: var(--c-bg-hover);
+}
+
+.card-stash-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--c-accent);
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--c-accent);
+  background: rgba(var(--c-accent-rgb), 0.05);
+}
+
+/* ─── 三栏布局 ─── */
+.card-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.card-sidebar {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  border-right: 0.5px solid var(--c-border);
+  background: var(--c-bg-card);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+.card-sidebar-right {
+  border-right: none;
+  border-left: 0.5px solid var(--c-border);
+}
+
+.card-sidebar.collapsed {
+  width: 48px;
+}
+
+.card-sidebar.collapsed .card-sidebar-content {
+  display: none;
+}
+
+.card-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-md) var(--sp-lg);
+  border-bottom: 0.5px solid var(--c-border);
+}
+
+.card-sidebar-title {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--c-text-2);
+}
+
+.card-sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--c-text-3);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.card-sidebar-toggle:hover {
+  color: var(--c-text);
+  background: var(--c-bg-hover);
+}
+
+.card-sidebar.collapsed .card-sidebar-toggle i {
+  transform: rotate(180deg);
+}
+
+.card-sidebar-content {
+  flex: 1;
+  padding: var(--sp-lg);
+  overflow-y: auto;
+}
+
+.card-sidebar-placeholder {
+  font-size: var(--text-sm);
+  color: var(--c-text-3);
+  text-align: center;
+  padding: var(--sp-xl) 0;
+}
+
+.card-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── 模式选择 ─── */
+.card-mode-select {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--sp-xl);
+  gap: var(--sp-xl);
+}
+
+.card-mode-title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.card-mode-options {
+  display: flex;
+  gap: var(--sp-xl);
+}
+
+.card-mode-card {
+  width: 240px;
+  padding: var(--sp-xl);
+  border: 0.5px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg-card);
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-out);
+  text-align: center;
+}
+
+.card-mode-card:hover {
+  border-color: var(--c-text-3);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.card-mode-card i {
+  font-size: 48px;
+  color: var(--c-accent);
+  margin-bottom: var(--sp-md);
+}
+
+.card-mode-card h3 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: var(--sp-sm);
+}
+
+.card-mode-card p {
+  font-size: var(--text-sm);
+  color: var(--c-text-2);
+  line-height: 1.5;
+}
+
+/* ─── 导入界面 ─── */
+.card-import {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-2xl);
+  max-width: 800px;
+  margin: 0 auto;
+  gap: var(--sp-lg);
+}
+
+.card-import-title {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  color: var(--c-text);
+}
+
+.card-import-desc {
+  font-size: var(--text-md);
+  color: var(--c-text-2);
+  line-height: 1.6;
+}
+
+.card-import-textarea {
+  width: 100%;
+  padding: var(--sp-lg);
+  border: 0.5px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg-card);
+  color: var(--c-text);
+  font-family: var(--font-base);
+  font-size: var(--text-md);
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.card-import-textarea:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.card-import-actions {
+  display: flex;
+  gap: var(--sp-md);
+  justify-content: flex-end;
+}
+
+/* ─── 对话界面 ─── */
+.card-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.card-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-lg);
+}
+
+.card-chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--sp-md);
+  color: var(--c-text-3);
+}
+
+.card-chat-empty i {
+  font-size: 48px;
+}
+
+.card-message {
+  max-width: 80%;
+  padding: var(--sp-lg);
+  border-radius: var(--radius-lg);
+  line-height: 1.6;
+}
+
+.card-message-user {
+  align-self: flex-end;
+  background: var(--c-accent);
+  color: var(--c-bg);
+}
+
+.card-message-ai {
+  align-self: flex-start;
+  background: var(--c-bg-card);
+  border: 0.5px solid var(--c-border);
+  color: var(--c-text);
+}
+
+.card-chat-input {
+  display: flex;
+  gap: var(--sp-md);
+  padding: var(--sp-lg) var(--sp-xl);
+  border-top: 0.5px solid var(--c-border);
+  background: var(--c-bg-card);
+}
+
+.card-input-textarea {
+  flex: 1;
+  padding: var(--sp-md);
+  border: 0.5px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-base);
+  font-size: var(--text-md);
+  resize: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.card-input-textarea:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+/* ─── 世界书暂存列表 ─── */
+.worldbook-stash-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-md);
+}
+
+.worldbook-stash-item {
+  padding: var(--sp-md);
+  border: 0.5px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sp-sm);
+}
+
+.worldbook-stash-text {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--c-text);
+  line-height: 1.5;
+}
+
+.worldbook-stash-remove {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--c-text-3);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.worldbook-stash-remove:hover {
+  color: var(--c-text);
+  background: var(--c-bg-hover);
+}
+
+/* ─── 响应式：手机端 ─── */
+@media (max-width: 768px) {
+  .card-topbar {
+    flex-direction: column;
+    gap: var(--sp-md);
+    align-items: stretch;
+  }
+
+  .card-tabs {
+    overflow-x: auto;
+  }
+
+  .card-main {
+    flex-direction: column;
+  }
+
+  .card-sidebar {
+    width: 100%;
+        max-height: 40vh;
+    border-right: none;
+    border-bottom: 0.5px solid var(--c-border);
+  }
+
+  .card-sidebar-right {
+    border-left: none;
+    border-top: 0.5px solid var(--c-border);
+    border-bottom: none;
+  }
+
+  .card-sidebar.collapsed {
+    max-height: 48px;
+    width: 100%;
+  }
+
+  .card-sidebar-left {
+    order: 3; /* 快捷指令放底部 */
+  }
+
+  .card-center {
+    order: 1; /* 对话区在最上 */
+  }
+
+  .card-sidebar-right {
+    order: 2; /* 世界书在中间 */
+  }
+
+  /* 手机端默认收起快捷指令 */
+  .card-sidebar-left {
+    max-height: 48px;
+  }
+
+  .card-sidebar-left .card-sidebar-content {
+    display: none;
+  }
+
+  .card-sidebar-left.expanded {
+    max-height: 40vh;
+  }
+
+  .card-sidebar-left.expanded .card-sidebar-content {
+    display: block;
+  }
+
+  .card-mode-options {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .card-mode-card {
+    width: 100%;
+  }
+
+  .card-import {
+    padding: var(--sp-lg);
+  }
+
+  .card-message {
+    max-width: 90%;
+  }
+}
