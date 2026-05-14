@@ -4,10 +4,10 @@
 
 const CardWorkshop = {
   // 状态机
-  STATE_EMPTY: 'empty',           // 无草稿，显示引导
+  STATE_EMPTY: 'empty',             // 无草稿，显示引导
   STATE_SELECT_MODE: 'select_mode', // 选择模式
-  STATE_IMPORT: 'import',         // 导入已有人设
-  STATE_CHAT: 'chat',             // 对话中
+  STATE_IMPORT: 'import',           // 导入已有人设
+  STATE_CHAT: 'chat',               // 对话中
 
   currentState: 'empty',
   currentDraft: null,
@@ -30,13 +30,13 @@ const CardWorkshop = {
 
   render() {
     const container = document.getElementById('app');
-    
+
     if (this.currentState === this.STATE_EMPTY) {
       container.innerHTML = this.renderEmpty();
     } else {
       container.innerHTML = this.renderWorkspace();
-      this.attachEventListeners();
-      this.renderCurrentView();
+      this.renderCurrentView();    // ← 先渲染内容，让 [data-mode] 等元素存在于 DOM
+      this.attachEventListeners(); // ← 再绑定事件
     }
   },
 
@@ -70,7 +70,7 @@ const CardWorkshop = {
         <div class="card-topbar">
           <div class="card-tabs">
             ${this.drafts.map(draft => `
-              <div class="card-tab ${draft.id === this.currentDraft?.id ? 'active' : ''}" 
+              <div class="card-tab ${draft.id === this.currentDraft?.id ? 'active' : ''}"
                    data-draft-id="${draft.id}">
                 <span class="card-tab-title">${draft.title}</span>
                 <button class="card-tab-close" data-action="close-tab">
@@ -143,13 +143,15 @@ const CardWorkshop = {
   // ─── 中间区域动态渲染 ───
   renderCurrentView() {
     const chatArea = document.getElementById('chatArea');
-    
+    if (!chatArea) return;
+
     if (this.currentState === this.STATE_SELECT_MODE) {
       chatArea.innerHTML = this.renderSelectMode();
     } else if (this.currentState === this.STATE_IMPORT) {
       chatArea.innerHTML = this.renderImport();
     } else if (this.currentState === this.STATE_CHAT) {
       chatArea.innerHTML = this.renderChat();
+      this.attachChatListeners(); // 对话区有独立的输入监听
     }
   },
 
@@ -180,8 +182,8 @@ const CardWorkshop = {
       <div class="card-import">
         <h2 class="card-import-title">导入已有人设</h2>
         <p class="card-import-desc">粘贴你的角色设定文本，AI 会帮你分析和优化</p>
-        <textarea 
-          class="card-import-textarea" 
+        <textarea
+          class="card-import-textarea"
           id="importTextarea"
           placeholder="粘贴角色设定文本..."
           rows="12"
@@ -203,7 +205,7 @@ const CardWorkshop = {
   // ─── 对话界面 ───
   renderChat() {
     const messages = this.currentDraft?.messages || [];
-    
+
     return `
       <div class="card-chat">
         <div class="card-chat-messages" id="chatMessages">
@@ -215,8 +217,8 @@ const CardWorkshop = {
           ` : messages.map(msg => this.renderMessage(msg)).join('')}
         </div>
         <div class="card-chat-input">
-          <textarea 
-            class="card-input-textarea" 
+          <textarea
+            class="card-input-textarea"
             id="chatInput"
             placeholder="输入消息..."
             rows="3"
@@ -233,7 +235,7 @@ const CardWorkshop = {
   renderMessage(msg) {
     const isUser = msg.role === 'user';
     return `
-      <div class="card-message ${isUser ? 'card-message-user' : 'card-message-ai'}" 
+      <div class="card-message ${isUser ? 'card-message-user' : 'card-message-ai'}"
            data-message-id="${msg.id}">
         <div class="card-message-content">
           ${msg.content}
@@ -242,46 +244,81 @@ const CardWorkshop = {
     `;
   },
 
-  // ─── 事件处理 ───
+  // ─── 事件绑定：工作区框架（Tab、侧边栏、模式选择）───
+  // 使用事件委托绑定在 #app 上，避免 chatArea 内容替换后失效
   attachEventListeners() {
     const container = document.getElementById('app');
 
-    // Tab 切换
-    container.querySelectorAll('.card-tab').forEach(tab => {
-      tab.addEventListener('click', (e) => {
-        if (e.target.closest('[data-action="close-tab"]')) {
-          this.closeDraft(tab.dataset.draftId);
-        } else {
-          this.switchDraft(tab.dataset.draftId);
-        }
-      });
-    });
-
-    // 新建草稿
-    const newBtn = container.querySelector('[data-action="new-draft"]');
-    if (newBtn) {
-      newBtn.addEventListener('click', () => this.createNewDraft());
+    // 移除旧监听器，防止重复绑定
+    const oldHandler = container._workshopHandler;
+    if (oldHandler) {
+      container.removeEventListener('click', oldHandler);
     }
 
-    // 侧边栏折叠
-    container.querySelectorAll('.card-sidebar-toggle').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    const handler = (e) => {
+      // Tab 关闭
+      if (e.target.closest('[data-action="close-tab"]')) {
+        const tab = e.target.closest('.card-tab');
+        if (tab) this.closeDraft(tab.dataset.draftId);
+        return;
+      }
+
+      // Tab 切换
+      const tab = e.target.closest('.card-tab');
+      if (tab && !e.target.closest('[data-action="close-tab"]')) {
+        this.switchDraft(tab.dataset.draftId);
+        return;
+      }
+
+      // 新建草稿
+      if (e.target.closest('[data-action="new-draft"]')) {
+        this.createNewDraft();
+        return;
+      }
+
+      // 侧边栏折叠
+      if (e.target.closest('.card-sidebar-toggle')) {
         const sidebar = e.target.closest('.card-sidebar');
-        sidebar.classList.toggle('collapsed');
-      });
-    });
+        if (sidebar) sidebar.classList.toggle('collapsed');
+        return;
+      }
 
-    // 模式选择
-    container.querySelectorAll('[data-mode]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        this.selectMode(e.target.closest('[data-mode]').dataset.mode);
-      });
-    });
+      // 模式选择（chatArea 内动态渲染，必须用委托）
+      const modeCard = e.target.closest('[data-mode]');
+      if (modeCard) {
+        this.selectMode(modeCard.dataset.mode);
+        return;
+      }
 
-    // 发送消息
+      // 世界书移除
+      const removeBtn = e.target.closest('.worldbook-stash-remove');
+      if (removeBtn) {
+        this.removeWorldbookItem(parseInt(removeBtn.dataset.index));
+        return;
+      }
+    };
+
+    container._workshopHandler = handler;
+    container.addEventListener('click', handler);
+  },
+
+  // ─── 事件绑定：对话区（每次 renderCurrentView 后重新绑定）───
+  attachChatListeners() {
     const sendBtn = document.getElementById('sendBtn');
+    const chatInput = document.getElementById('chatInput');
+
     if (sendBtn) {
       sendBtn.addEventListener('click', () => this.sendMessage());
+    }
+
+    // Ctrl/Cmd + Enter 发送
+    if (chatInput) {
+      chatInput.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          this.sendMessage();
+        }
+      });
     }
   },
 
@@ -322,7 +359,7 @@ const CardWorkshop = {
   confirmImport() {
     const textarea = document.getElementById('importTextarea');
     const text = textarea.value.trim();
-    
+
     if (!text) {
       alert('请输入人设内容');
       return;
@@ -361,10 +398,19 @@ const CardWorkshop = {
     this.render();
   },
 
+  removeWorldbookItem(index) {
+    if (!this.currentDraft?.worldbookStash) return;
+    this.currentDraft.worldbookStash.splice(index, 1);
+    DraftStorage.update(this.currentDraft.id, {
+      worldbookStash: this.currentDraft.worldbookStash
+    });
+    this.render();
+  },
+
   sendMessage() {
     const input = document.getElementById('chatInput');
-    const text = input.value.trim();
-    
+    const text = input?.value.trim();
+
     if (!text) return;
 
     const userMsg = {
@@ -375,8 +421,8 @@ const CardWorkshop = {
     };
 
     this.currentDraft.messages.push(userMsg);
-    DraftStorage.update(this.currentDraft.id, { 
-      messages: this.currentDraft.messages 
+    DraftStorage.update(this.currentDraft.id, {
+      messages: this.currentDraft.messages
     });
 
     input.value = '';
@@ -392,15 +438,11 @@ const CardWorkshop = {
   }
 };
 
-// 注册路由（在文件末尾）
+// ─── 注册路由 ───
 if (typeof Router !== 'undefined') {
   Router.register('/card', () => {
-    // 延迟执行，等路由动画完成
-    setTimeout(() => {
-      CardWorkshop.init();
-    }, 0);
-    return ''; // 返回空字符串
+    setTimeout(() => CardWorkshop.init(), 0);
+    return '';
   });
 }
-
-
+/* ═══ END: CardWorkshop ═══ */
