@@ -520,3 +520,7 @@
     max-width: 90%;
   }
 }
+/* 确保按钮有足够的内边距 */
+.card-empty-state .btn {
+  padding: 12px 32px !important;
+}
