@@ -394,6 +394,9 @@ const CardWorkshop = {
 
 // 注册路由
 if (typeof Router !== 'undefined') {
-  Router.register('/card', () => CardWorkshop.init());
+  Router.register('/card', () => {
+    CardWorkshop.init();
+    return ''; // 返回空字符串
+  });
 }
 
