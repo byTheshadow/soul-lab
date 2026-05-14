@@ -392,11 +392,15 @@ const CardWorkshop = {
   }
 };
 
-// 注册路由
+// 注册路由（在文件末尾）
 if (typeof Router !== 'undefined') {
   Router.register('/card', () => {
-    CardWorkshop.init();
+    // 延迟执行，等路由动画完成
+    setTimeout(() => {
+      CardWorkshop.init();
+    }, 0);
     return ''; // 返回空字符串
   });
 }
+
 
