@@ -20,6 +20,11 @@ const CardWorkshop = {
   _abortController: null,
   _isStreaming: false,
 
+  // ─── 划词工具条 ───
+  _selectionToolbar: null,
+  _selectionToolbarHandler: null,
+  _selectionTouchTimer: null,
+
   // ─── max_tokens 档位 ───
   TOKEN_PRESETS: [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 128000],
 
@@ -321,6 +326,8 @@ const CardWorkshop = {
       chatArea.innerHTML = this.renderChat();
       this.attachChatListeners();
       this.scrollToBottom();
+      // 进入对话状态时挂载划词工具条
+      this._mountSelectionToolbar();
     }
   },
 
@@ -390,22 +397,22 @@ const CardWorkshop = {
                 <h3 class="card-direction-card-name">${dir.name}</h3>
                 <p class="card-direction-card-desc">${dir.desc}</p>
               </div>
-              <div class="card-direction-card-check">
+                            <div class="card-direction-card-check">
                 <i class="ti ti-check"></i>
               </div>
             </button>
           `).join('')}
         </div>
         <div class="card-direction-actions">
-          <button class="btn" data-action="back-from-direction">
+          <button class="btn" onclick="CardWorkshop.backToModeSelect()">
             <i class="ti ti-arrow-left"></i>
             返回
           </button>
           <button
-            class="btn btn-primary ${selectedId ? '' : 'disabled'}"
+            class="btn btn-primary ${!selectedId ? 'disabled' : ''}"
             id="startChatBtn"
-            data-action="confirm-direction"
-            ${selectedId ? '' : 'disabled'}
+            onclick="CardWorkshop.startChat()"
+            ${!selectedId ? 'disabled' : ''}
           >
             <i class="ti ti-sparkles"></i>
             开始创作
@@ -416,51 +423,51 @@ const CardWorkshop = {
   },
 
   renderChat() {
-    const messages = this.currentDraft?.messages || [];
-    const systemPrompt = this.currentDraft?.systemPrompt || '';
-    const direction = this.DIRECTIONS.find(d => d.id === this.currentDraft?.direction);
+    const draft = this.currentDraft;
+    const directionName = this.DIRECTIONS.find(d => d.id === draft.direction)?.name || '';
+    const isOpen = draft._systemPromptOpen || false;
 
     return `
       <div class="card-chat">
-
         <!-- System Prompt 折叠面板 -->
-        <div class="card-system-prompt" id="systemPromptPanel">
+        <div class="card-system-prompt">
           <button class="card-system-prompt-header" data-action="toggle-system-prompt">
-            <span class="card-system-prompt-label">
-              <i class="ti ti-terminal-2"></i>
-              系统提示词
-              ${direction ? `<span class="card-direction-badge">${direction.name}</span>` : ''}
-            </span>
-            <i class="ti ti-chevron-down card-system-prompt-chevron"></i>
-          </button>
-          <div class="card-system-prompt-body" id="systemPromptBody" style="display:none">
-            <textarea
-              class="card-system-prompt-textarea"
-              id="systemPromptTextarea"
-              rows="8"
-              placeholder="输入系统提示词..."
-            >${this._escapeHtml(systemPrompt)}</textarea>
-            <div class="card-system-prompt-actions">
-              <button class="btn btn-sm" data-action="reset-system-prompt">
-                <i class="ti ti-refresh"></i>
-                重置默认
-              </button>
-              <button class="btn btn-sm btn-primary" data-action="save-system-prompt">
-                <i class="ti ti-check"></i>
-                保存
-              </button>
+            <div class="card-system-prompt-label">
+              <i class="ti ti-settings"></i>
+              <span>系统提示词</span>
+              ${directionName ? `<span class="card-direction-badge">${directionName}</span>` : ''}
             </div>
-          </div>
+            <i class="ti ${isOpen ? 'ti-chevron-up' : 'ti-chevron-down'} card-system-prompt-chevron"></i>
+          </button>
+          ${isOpen ? `
+            <div class="card-system-prompt-body">
+              <textarea
+                class="card-system-prompt-textarea"
+                id="systemPromptTextarea"
+                rows="8"
+              >${this._escapeHtml(draft.systemPrompt || '')}</textarea>
+              <div class="card-system-prompt-actions">
+                <button class="btn btn-sm" onclick="CardWorkshop.resetSystemPrompt()">
+                  <i class="ti ti-refresh"></i>
+                  重置
+                </button>
+                <button class="btn btn-sm btn-primary" onclick="CardWorkshop.saveSystemPrompt()">
+                  <i class="ti ti-check"></i>
+                  保存
+                </button>
+              </div>
+            </div>
+          ` : ''}
         </div>
 
         <!-- 消息列表 -->
-        <div class="card-chat-messages" id="chatMessages">
-          ${messages.length === 0 ? `
+        <div class="card-chat-messages" id="messageList">
+          ${draft.messages.length === 0 ? `
             <div class="card-chat-empty">
               <i class="ti ti-message-circle"></i>
-              <p>开始与 AI 对话，创作你的角色卡</p>
+              <p>开始你的创作对话</p>
             </div>
-          ` : messages.map(msg => this.renderMessage(msg)).join('')}
+          ` : draft.messages.map(msg => this._renderMessageHtml(msg)).join('')}
         </div>
 
         <!-- 输入区 -->
@@ -468,511 +475,794 @@ const CardWorkshop = {
           <textarea
             class="card-input-textarea"
             id="chatInput"
-            placeholder="输入消息… (Ctrl+Enter 发送)"
+            placeholder="输入消息，Shift+Enter 换行，Enter 发送"
             rows="3"
+            ${this._isStreaming ? 'disabled' : ''}
           ></textarea>
-          <button class="btn btn-primary" id="sendBtn">
-            <i class="ti ti-send"></i>
-            发送
-          </button>
+          ${this._isStreaming ? `
+            <button class="btn btn-stop" onclick="CardWorkshop.stopStreaming()">
+              <i class="ti ti-player-stop"></i>
+              停止
+            </button>
+          ` : `
+            <button class="btn btn-primary" id="sendBtn">
+              <i class="ti ti-send"></i>
+              发送
+            </button>
+          `}
         </div>
       </div>
     `;
   },
 
-  renderMessage(msg) {
-    const isUser = msg.role === 'user';
-    const isError = msg.role === 'error';
-
-    let cls = 'card-message-ai';
-    if (isUser) cls = 'card-message-user';
-    if (isError) cls = 'card-message-error';
-
-    const content = isUser || isError
-      ? this._escapeHtml(msg.content)
-      : this._renderMarkdownLite(msg.content);
-
-    return `
-      <div class="card-message ${cls}" data-message-id="${msg.id}">
-        <div class="card-message-content">${content}</div>
-      </div>
-    `;
-  },
-
-    // ══════════════════════════════════════════
+  // ══════════════════════════════════════════
   // 事件绑定
   // ══════════════════════════════════════════
 
   attachEventListeners() {
-    const container = document.getElementById('app');
+    const app = document.getElementById('app');
+    if (!app) return;
 
-    const oldHandler = container._workshopHandler;
-    if (oldHandler) container.removeEventListener('click', oldHandler);
+    // 事件委托：顶部栏 + 侧边栏
+    app.addEventListener('click', (e) => {
+      const action = e.target.closest('[data-action]')?.dataset.action;
+      const draftId = e.target.closest('[data-draft-id]')?.dataset.draftId;
+      const mode = e.target.closest('[data-mode]')?.dataset.mode;
+      const direction = e.target.closest('[data-direction]')?.dataset.direction;
 
-    const handler = (e) => {
-      // Tab 关闭
-      if (e.target.closest('[data-action="close-tab"]')) {
-        const tab = e.target.closest('.card-tab');
-        if (tab) this.closeDraft(tab.dataset.draftId);
+      // 草稿标签切换
+      if (draftId && !action) {
+        this.switchDraft(draftId);
         return;
       }
-      // Tab 切换
-      const tab = e.target.closest('.card-tab');
-      if (tab && !e.target.closest('[data-action="close-tab"]')) {
-        this.switchDraft(tab.dataset.draftId);
-        return;
+
+      switch (action) {
+        case 'close-tab': {
+          const tabEl = e.target.closest('[data-draft-id]');
+          if (tabEl) this.closeDraft(tabEl.dataset.draftId);
+          break;
+        }
+        case 'new-draft':
+          this.createNewDraft();
+          break;
+        case 'toggle-shortcuts':
+          document.getElementById('shortcutPanel')?.classList.toggle('collapsed');
+          break;
+        case 'toggle-worldbook':
+          document.getElementById('worldbookPanel')?.classList.toggle('collapsed');
+          break;
+        case 'toggle-system-prompt':
+          this._toggleSystemPrompt();
+          break;
       }
-      // 新建草稿
-      if (e.target.closest('[data-action="new-draft"]')) {
-        this.createNewDraft();
-        return;
-      }
-      // 侧边栏折叠
-      if (e.target.closest('[data-action="toggle-shortcuts"]') ||
-          e.target.closest('[data-action="toggle-worldbook"]')) {
-        const sidebar = e.target.closest('.card-sidebar');
-        if (sidebar) sidebar.classList.toggle('collapsed');
-        return;
-      }
+
       // 模式选择
-      const modeCard = e.target.closest('[data-mode]');
-      if (modeCard) {
-        this.selectMode(modeCard.dataset.mode);
+      if (mode) {
+        this.selectMode(mode);
         return;
       }
-      // 方向选择（卡片点击）
-      const dirCard = e.target.closest('[data-direction]');
-      if (dirCard) {
-        this.highlightDirection(dirCard.dataset.direction);
+
+      // 方向选择
+      if (direction) {
+        this.selectDirection(direction);
         return;
       }
-      // 方向确认
-      if (e.target.closest('[data-action="confirm-direction"]')) {
-        this.confirmDirection();
-        return;
-      }
-      // 方向页返回
-      if (e.target.closest('[data-action="back-from-direction"]')) {
-        this.backFromDirection();
-        return;
-      }
-      // 世界书移除
+    });
+
+    // 世界书暂存：删除条目
+    app.addEventListener('click', (e) => {
       const removeBtn = e.target.closest('.worldbook-stash-remove');
       if (removeBtn) {
-        this.removeWorldbookItem(parseInt(removeBtn.dataset.index));
-        return;
+        const idx = parseInt(removeBtn.dataset.index, 10);
+        this.removeWorldbookItem(idx);
       }
-      // System Prompt 折叠
-      if (e.target.closest('[data-action="toggle-system-prompt"]')) {
-        this.toggleSystemPrompt();
-        return;
-      }
-      // System Prompt 保存
-      if (e.target.closest('[data-action="save-system-prompt"]')) {
-        this.saveSystemPrompt();
-        return;
-      }
-      // System Prompt 重置
-      if (e.target.closest('[data-action="reset-system-prompt"]')) {
-        this.resetSystemPrompt();
-        return;
-      }
-    };
+    });
 
-    container._workshopHandler = handler;
-    container.addEventListener('click', handler);
-
-    // token 滑块
-    const tokenSlider = document.getElementById('tokenSlider');
-    if (tokenSlider) {
-      tokenSlider.addEventListener('input', (e) => {
-        const idx = parseInt(e.target.value);
+    // max_tokens 滑块
+    app.addEventListener('input', (e) => {
+      if (e.target.id === 'tokenSlider') {
+        const idx = parseInt(e.target.value, 10);
         const val = this.TOKEN_PRESETS[idx];
         const display = document.getElementById('tokenDisplay');
         if (display) display.textContent = val.toLocaleString();
         if (this.currentDraft) {
-          this.currentDraft.maxTokens = val;
           DraftStorage.update(this.currentDraft.id, { maxTokens: val });
+          this.currentDraft.maxTokens = val;
         }
-      });
-    }
+      }
+    });
   },
 
   attachChatListeners() {
     const sendBtn = document.getElementById('sendBtn');
     const chatInput = document.getElementById('chatInput');
+    if (!sendBtn || !chatInput) return;
 
-    if (sendBtn) {
-      sendBtn.addEventListener('click', () => {
-        if (this._isStreaming) {
-          this.stopStreaming();
-        } else {
-          this.sendMessage();
-        }
-      });
+    sendBtn.addEventListener('click', () => this.sendMessage());
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.sendMessage();
+      }
+    });
+
+    // 自动撑高输入框
+    chatInput.addEventListener('input', () => {
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
+    });
+  },
+
+  // ══════════════════════════════════════════
+  // 划词工具条
+  // ══════════════════════════════════════════
+
+  _mountSelectionToolbar() {
+    // 避免重复挂载
+    this._unmountSelectionToolbar();
+
+    // 创建工具条 DOM（挂在 body 上，避免被 overflow:hidden 裁剪）
+    const toolbar = document.createElement('div');
+    toolbar.className = 'selection-toolbar';
+    toolbar.id = 'selectionToolbar';
+    toolbar.innerHTML = `
+      <button class="selection-toolbar-btn" id="stashBtn">
+        <i class="ti ti-bookmark-plus"></i>
+        <span>标记到世界书</span>
+      </button>
+      <div class="selection-toolbar-divider"></div>
+      <button class="selection-toolbar-btn" id="askBtn">
+        <i class="ti ti-message-forward"></i>
+        <span>追问</span>
+      </button>
+    `;
+    document.body.appendChild(toolbar);
+    this._selectionToolbar = toolbar;
+
+    // 绑定工具条按钮
+    toolbar.querySelector('#stashBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this._handleStashSelection();
+    });
+    toolbar.querySelector('#askBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this._handleAskSelection();
+    });
+
+    // 阻止工具条自身的 mousedown 清除选区
+    toolbar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+    });
+
+    // PC 端：监听 mouseup
+    this._selectionToolbarHandler = (e) => {
+      // 如果点击的是工具条本身，不处理
+      if (toolbar.contains(e.target)) return;
+      this._onSelectionChange(e);
+    };
+    document.addEventListener('mouseup', this._selectionToolbarHandler);
+
+    // 移动端：监听 selectionchange（touchend 后触发）
+    this._selectionChangeHandler = () => {
+      // 用 setTimeout 等选区稳定
+      clearTimeout(this._selectionTouchTimer);
+      this._selectionTouchTimer = setTimeout(() => {
+        this._onSelectionChange(null);
+      }, 200);
+    };
+    document.addEventListener('selectionchange', this._selectionChangeHandler);
+
+    // 点击空白处隐藏工具条
+    this._hideToolbarHandler = (e) => {
+      if (!toolbar.contains(e.target)) {
+        this._hideSelectionToolbar();
+      }
+    };
+    document.addEventListener('mousedown', this._hideToolbarHandler);
+    document.addEventListener('touchstart', this._hideToolbarHandler, { passive: true });
+  },
+
+  _unmountSelectionToolbar() {
+    if (this._selectionToolbar) {
+      this._selectionToolbar.remove();
+      this._selectionToolbar = null;
+    }
+    if (this._selectionToolbarHandler) {
+      document.removeEventListener('mouseup', this._selectionToolbarHandler);
+      this._selectionToolbarHandler = null;
+    }
+    if (this._selectionChangeHandler) {
+      document.removeEventListener('selectionchange', this._selectionChangeHandler);
+      this._selectionChangeHandler = null;
+    }
+    if (this._hideToolbarHandler) {
+      document.removeEventListener('mousedown', this._hideToolbarHandler);
+      document.removeEventListener('touchstart', this._hideToolbarHandler);
+      this._hideToolbarHandler = null;
+    }
+    clearTimeout(this._selectionTouchTimer);
+  },
+
+  _onSelectionChange(e) {
+    // 流式输出中禁用
+    if (this._isStreaming) {
+      this._hideSelectionToolbar();
+      return;
     }
 
-    if (chatInput) {
-      chatInput.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-          e.preventDefault();
-          if (!this._isStreaming) this.sendMessage();
-        }
-      });
+    const selection = window.getSelection();
+    const selectedText = selection?.toString().trim();
+
+    // 没有选中文字，隐藏
+    if (!selectedText) {
+      this._hideSelectionToolbar();
+      return;
+    }
+
+    // 检查选区是否在 .card-chat-messages 内
+    const messageList = document.getElementById('messageList');
+    if (!messageList) {
+      this._hideSelectionToolbar();
+      return;
+    }
+
+    const anchorNode = selection.anchorNode;
+    if (!messageList.contains(anchorNode)) {
+      this._hideSelectionToolbar();
+      return;
+    }
+
+    // 计算工具条位置
+    this._positionAndShowToolbar(selection);
+  },
+
+  _positionAndShowToolbar(selection) {
+    const toolbar = this._selectionToolbar;
+    if (!toolbar) return;
+
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+
+    // 工具条尺寸（先显示再测量，或用估算值）
+    const toolbarHeight = 44;
+    const toolbarWidth = 240; // 估算值，实际会自适应
+    const gap = 8;
+    const arrowSize = 5;
+
+    let top, left;
+    let below = false;
+
+    // 默认出现在选区上方
+    top = rect.top - toolbarHeight - arrowSize - gap;
+
+    // 如果上方空间不足，改为出现在选区下方
+    if (top < 8) {
+      top = rect.bottom + arrowSize + gap;
+      below = true;
+    }
+
+    // 水平居中对齐选区
+    left = rect.left + rect.width / 2 - toolbarWidth / 2;
+
+    // 边界检测：不超出屏幕左右
+    const viewportWidth = window.innerWidth;
+    if (left < 8) left = 8;
+    if (left + toolbarWidth > viewportWidth - 8) {
+      left = viewportWidth - toolbarWidth - 8;
+    }
+
+    toolbar.style.top = `${top}px`;
+    toolbar.style.left = `${left}px`;
+    toolbar.classList.toggle('toolbar-below', below);
+    toolbar.classList.add('visible');
+  },
+
+  _hideSelectionToolbar() {
+    this._selectionToolbar?.classList.remove('visible');
+  },
+
+  // 标记到世界书
+  _handleStashSelection() {
+    const selectedText = window.getSelection()?.toString().trim();
+    if (!selectedText || !this.currentDraft) return;
+
+    const stash = this.currentDraft.worldbookStash || [];
+    stash.push({ text: selectedText });
+    DraftStorage.update(this.currentDraft.id, { worldbookStash: stash });
+    this.currentDraft.worldbookStash = stash;
+
+    // 更新右侧面板
+    this._refreshWorldbookPanel();
+
+    // 更新顶部计数
+    const stashCountEl = document.getElementById('stashCount');
+    if (stashCountEl) stashCountEl.textContent = `世界书暂存 (${stash.length})`;
+
+    // 清除选区并隐藏工具条
+    window.getSelection()?.removeAllRanges();
+    this._hideSelectionToolbar();
+
+    this._showToast('已标记到世界书暂存');
+  },
+
+  // 追问选中内容
+  _handleAskSelection() {
+    const selectedText = window.getSelection()?.toString().trim();
+    if (!selectedText) return;
+
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput) return;
+
+    const prompt = `关于"${selectedText}"，请进一步说明：`;
+    chatInput.value = prompt;
+    chatInput.focus();
+
+    // 光标定位到末尾
+    chatInput.setSelectionRange(prompt.length, prompt.length);
+
+    // 触发 input 事件以自动撑高
+    chatInput.dispatchEvent(new Event('input'));
+
+    // 清除选区并隐藏工具条
+    window.getSelection()?.removeAllRanges();
+    this._hideSelectionToolbar();
+  },
+
+  // 刷新世界书暂存面板
+  _refreshWorldbookPanel() {
+    const content = document.getElementById('worldbookContent');
+    if (content) {
+      content.innerHTML = this.renderWorldbookStash();
     }
   },
 
-  // ══════════════════════════════════════════
-  // System Prompt
-  // ══════════════════════════════════════════
+  // 删除世界书条目
+  removeWorldbookItem(idx) {
+    if (!this.currentDraft) return;
+    const stash = [...(this.currentDraft.worldbookStash || [])];
+    stash.splice(idx, 1);
+    DraftStorage.update(this.currentDraft.id, { worldbookStash: stash });
+    this.currentDraft.worldbookStash = stash;
 
-  toggleSystemPrompt() {
-    const body = document.getElementById('systemPromptBody');
-    const chevron = document.querySelector('.card-system-prompt-chevron');
-    if (!body) return;
-    const isOpen = body.style.display !== 'none';
-    body.style.display = isOpen ? 'none' : 'block';
-    if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
-  },
+    this._refreshWorldbookPanel();
 
-  saveSystemPrompt() {
-    const textarea = document.getElementById('systemPromptTextarea');
-    if (!textarea || !this.currentDraft) return;
-    const val = textarea.value.trim();
-    this.currentDraft.systemPrompt = val;
-    DraftStorage.update(this.currentDraft.id, { systemPrompt: val });
-    this._showToast('系统提示词已保存');
-  },
-
-  resetSystemPrompt() {
-    const textarea = document.getElementById('systemPromptTextarea');
-    if (!textarea || !this.currentDraft) return;
-    const defaultPrompt = this._buildSystemPrompt(
-      this.currentDraft.direction || 'free',
-      this.currentDraft.mode || 'inspiration'
-    );
-    textarea.value = defaultPrompt;
-    this.currentDraft.systemPrompt = defaultPrompt;
-    DraftStorage.update(this.currentDraft.id, { systemPrompt: defaultPrompt });
-    this._showToast('已重置为默认提示词');
+    const stashCountEl = document.getElementById('stashCount');
+    if (stashCountEl) stashCountEl.textContent = `世界书暂存 (${stash.length})`;
   },
 
   // ══════════════════════════════════════════
-  // 业务逻辑
+  // 状态机操作
   // ══════════════════════════════════════════
 
   createNewDraft() {
     if (this.drafts.length >= 3) {
-      this._showToast('最多只能创建 3 个草稿');
+      this._showToast('最多同时创建 3 个草稿');
       return;
     }
-    // 临时草稿，选完方向再正式创建
-    this.currentDraft = null;
+    const draft = DraftStorage.create('inspiration');
+    this.drafts = DraftStorage.getAll();
+    this.currentDraft = draft;
     this.currentState = this.STATE_SELECT_MODE;
     this.render();
   },
 
-  selectMode(mode) {
-    // 先创建草稿占位
-    const draft = DraftStorage.create(mode);
-    if (!draft) {
-      this._showToast('创建草稿失败');
-      return;
-    }
-    draft.maxTokens = 4096;
-    draft.worldbookStash = [];
-    draft.messages = [];
-    DraftStorage.update(draft.id, {
-      maxTokens: draft.maxTokens,
-      worldbookStash: draft.worldbookStash,
-      messages: draft.messages,
-    });
-
-    this.drafts.push(draft);
+  switchDraft(id) {
+    const draft = this.drafts.find(d => d.id === id);
+    if (!draft || draft.id === this.currentDraft?.id) return;
     this.currentDraft = draft;
-
-    if (mode === 'existing') {
-      this.currentState = this.STATE_IMPORT;
-    } else {
-      // 灵感创作：直接去选方向
-      this.currentState = this.STATE_SELECT_DIRECTION;
-    }
+    this.currentState = draft.messages?.length > 0 ? this.STATE_CHAT : this.STATE_SELECT_MODE;
     this.render();
   },
 
-  cancelImport() {
-    // 删除刚创建的草稿
-    if (this.currentDraft) {
-      DraftStorage.delete(this.currentDraft.id);
-      this.drafts = this.drafts.filter(d => d.id !== this.currentDraft.id);
-      this.currentDraft = this.drafts[0] || null;
+  closeDraft(id) {
+    DraftStorage.delete(id);
+    this.drafts = DraftStorage.getAll();
+    if (this.drafts.length === 0) {
+      this.currentDraft = null;
+      this.currentState = this.STATE_EMPTY;
+      this._unmountSelectionToolbar();
+      this.render();
+    } else {
+      if (this.currentDraft?.id === id) {
+        this.currentDraft = this.drafts[0];
+        this.currentState = this.currentDraft.messages?.length > 0
+          ? this.STATE_CHAT
+          : this.STATE_SELECT_MODE;
+      }
+      this.render();
     }
-    this.currentState = this.drafts.length > 0 ? this.STATE_CHAT : this.STATE_SELECT_MODE;
-    this.render();
+  },
+
+  selectMode(mode) {
+    if (!this.currentDraft) return;
+    DraftStorage.update(this.currentDraft.id, { mode });
+    this.currentDraft.mode = mode;
+    if (mode === 'existing') {
+      this.currentState = this.STATE_IMPORT;
+    } else {
+      this.currentState = this.STATE_SELECT_DIRECTION;
+    }
+    this.renderCurrentView();
+  },
+
+  cancelImport() {
+    // 删除当前空草稿，返回空状态或上一个草稿
+    const id = this.currentDraft?.id;
+    if (id) DraftStorage.delete(id);
+    this.drafts = DraftStorage.getAll();
+    if (this.drafts.length === 0) {
+      this.currentDraft = null;
+      this.currentState = this.STATE_EMPTY;
+      this._unmountSelectionToolbar();
+      this.render();
+    } else {
+      this.currentDraft = this.drafts[0];
+      this.currentState = this.STATE_CHAT;
+      this.render();
+    }
   },
 
   confirmImport() {
     const textarea = document.getElementById('importTextarea');
     const text = textarea?.value.trim();
     if (!text) {
-      this._showToast('请输入人设内容');
+      this._showToast('请先粘贴角色设定文本');
       return;
     }
-    // 保存原文，进入方向选择
-    this.currentDraft.sourceText = text;
     DraftStorage.update(this.currentDraft.id, { sourceText: text });
+    this.currentDraft.sourceText = text;
     this.currentState = this.STATE_SELECT_DIRECTION;
     this.renderCurrentView();
   },
 
-  highlightDirection(directionId) {
-    // 更新卡片选中状态（不重渲染整页）
+  backToModeSelect() {
+    this.currentState = this.STATE_SELECT_MODE;
+    this.renderCurrentView();
+  },
+
+  selectDirection(directionId) {
+    if (!this.currentDraft) return;
+    const prompt = this.DIRECTION_PROMPTS[directionId] || '';
+    DraftStorage.update(this.currentDraft.id, {
+      direction: directionId,
+      systemPrompt: prompt,
+    });
+    this.currentDraft.direction = directionId;
+    this.currentDraft.systemPrompt = prompt;
+
+    // 更新方向卡片选中状态（不重渲染整个视图）
     document.querySelectorAll('.card-direction-card').forEach(card => {
       card.classList.toggle('selected', card.dataset.direction === directionId);
     });
+
     // 启用开始按钮
     const startBtn = document.getElementById('startChatBtn');
     if (startBtn) {
       startBtn.disabled = false;
       startBtn.classList.remove('disabled');
     }
-    // 暂存选择
-    if (this.currentDraft) {
-      this.currentDraft.direction = directionId;
-    }
   },
 
-  confirmDirection() {
-    const directionId = this.currentDraft?.direction;
-    if (!directionId) {
-      this._showToast('请先选择一个创作方向');
-      return;
-    }
-
-    const mode = this.currentDraft.mode || 'inspiration';
-    const systemPrompt = this._buildSystemPrompt(directionId, mode);
-
-    this.currentDraft.systemPrompt = systemPrompt;
-    DraftStorage.update(this.currentDraft.id, {
-      direction: directionId,
-      systemPrompt,
-    });
-
+  startChat() {
+    if (!this.currentDraft?.direction) return;
     this.currentState = this.STATE_CHAT;
-    this.render();
+    this.renderCurrentView();
 
-    // 已有人设模式：触发 AI 自动分析
-    if (mode === 'existing' && this.currentDraft.sourceText) {
-      this._triggerImportAnalysis(this.currentDraft.sourceText, directionId);
-    }
-  },
-
-  backFromDirection() {
-    const mode = this.currentDraft?.mode;
-    if (mode === 'existing') {
-      this.currentState = this.STATE_IMPORT;
-    } else {
-      // 灵感创作返回模式选择，删除当前草稿
-      if (this.currentDraft) {
-        DraftStorage.delete(this.currentDraft.id);
-        this.drafts = this.drafts.filter(d => d.id !== this.currentDraft.id);
-        this.currentDraft = this.drafts[0] || null;
-      }
-      this.currentState = this.drafts.length > 0 ? this.STATE_CHAT : this.STATE_SELECT_MODE;
-    }
-    this.render();
-  },
-
-  switchDraft(draftId) {
-    const draft = this.drafts.find(d => d.id === draftId);
-    if (draft) {
-      this.currentDraft = draft;
-      this.currentState = this.STATE_CHAT;
-      this.render();
-    }
-  },
-
-  closeDraft(draftId) {
-    if (!confirm('确定关闭此草稿？')) return;
-    DraftStorage.delete(draftId);
-    this.drafts = this.drafts.filter(d => d.id !== draftId);
-    if (this.drafts.length === 0) {
-      this.currentState = this.STATE_EMPTY;
-      this.currentDraft = null;
-    } else {
-      this.currentDraft = this.drafts[0];
-      this.currentState = this.STATE_CHAT;
-    }
-    this.render();
-  },
-
-  removeWorldbookItem(index) {
-    if (!this.currentDraft?.worldbookStash) return;
-    this.currentDraft.worldbookStash.splice(index, 1);
-    DraftStorage.update(this.currentDraft.id, {
-      worldbookStash: this.currentDraft.worldbookStash,
-    });
-    const content = document.getElementById('worldbookContent');
-    if (content) content.innerHTML = this.renderWorldbookStash();
-    const indicator = document.getElementById('stashCount');
-    if (indicator) {
-      indicator.textContent = `世界书暂存 (${this.currentDraft.worldbookStash.length})`;
+    // 已有人设模式：自动发送分析请求
+    if (this.currentDraft.mode === 'existing' && this.currentDraft.sourceText) {
+      const prefix = this.DIRECTION_ANALYSIS_PREFIX[this.currentDraft.direction] || '';
+      const analysisMsg = `${prefix}\n\n以下是我的角色人设：\n\n${this.currentDraft.sourceText}`;
+      setTimeout(() => this._sendAiMessage(analysisMsg), 300);
     }
   },
 
   // ══════════════════════════════════════════
-  // System Prompt 构建
+  // System Prompt 操作
   // ══════════════════════════════════════════
 
-  _buildSystemPrompt(directionId, mode) {
-    const directionPrompt = this.DIRECTION_PROMPTS[directionId] || this.DIRECTION_PROMPTS.free;
+  _toggleSystemPrompt() {
+    if (!this.currentDraft) return;
+    const isOpen = !this.currentDraft._systemPromptOpen;
+    this.currentDraft._systemPromptOpen = isOpen;
+    this.renderCurrentView();
+  },
 
-    if (mode === 'existing') {
-      const analysisPrefix = this.DIRECTION_ANALYSIS_PREFIX[directionId] || this.DIRECTION_ANALYSIS_PREFIX.free;
-      return `${directionPrompt}\n\n---\n\n**当前任务：** 用户将提供一份已有的角色人设，请按以下要求进行分析：\n${analysisPrefix}`;
-    }
+  saveSystemPrompt() {
+    const textarea = document.getElementById('systemPromptTextarea');
+    if (!textarea || !this.currentDraft) return;
+    DraftStorage.update(this.currentDraft.id, { systemPrompt: textarea.value });
+    this.currentDraft.systemPrompt = textarea.value;
+    this._showToast('系统提示词已保存');
+  },
 
-    return directionPrompt;
+  resetSystemPrompt() {
+    if (!this.currentDraft) return;
+    const defaultPrompt = this.DIRECTION_PROMPTS[this.currentDraft.direction] || '';
+    DraftStorage.update(this.currentDraft.id, { systemPrompt: defaultPrompt });
+    this.currentDraft.systemPrompt = defaultPrompt;
+    const textarea = document.getElementById('systemPromptTextarea');
+    if (textarea) textarea.value = defaultPrompt;
+    this._showToast('已重置为默认提示词');
   },
 
   // ══════════════════════════════════════════
-  // AI 对话核心
+  // 对话逻辑
   // ══════════════════════════════════════════
 
-  sendMessage() {
+  async sendMessage() {
     const input = document.getElementById('chatInput');
     const text = input?.value.trim();
     if (!text || this._isStreaming) return;
 
+    input.value = '';
+    input.style.height = 'auto';
+
+    // 追加用户消息
     const userMsg = {
       id: `msg_${Date.now()}`,
       role: 'user',
       content: text,
       timestamp: Date.now(),
     };
-
     this.currentDraft.messages.push(userMsg);
     DraftStorage.update(this.currentDraft.id, { messages: this.currentDraft.messages });
-    input.value = '';
-
     this._appendMessage(userMsg);
     this.scrollToBottom();
-    this.callAI();
+
+    await this._sendAiMessage(text);
   },
 
-  async _triggerImportAnalysis(sourceText, directionId) {
-    const analysisPrefix = this.DIRECTION_ANALYSIS_PREFIX[directionId] || this.DIRECTION_ANALYSIS_PREFIX.free;
-    const hiddenMsg = {
-      role: 'user',
-      content: `以下是我的角色人设，请你按照你的专业视角进行分析（${analysisPrefix.slice(0, 30)}…）：\n\n${sourceText}`,
-    };
-    await this.callAI([hiddenMsg]);
-  },
+  async _sendAiMessage(userContent) {
+    const draft = this.currentDraft;
+    if (!draft) return;
 
-  async callAI(extraMessages = []) {
-    const apiKey = Storage.getApiKey();
-    if (!apiKey) {
-      this._appendErrorMessage('未设置 API Key，请前往设置页面配置。');
-      return;
-    }
-    const config = Storage.getApiConfig();
-    if (!config.model) {
-      this._appendErrorMessage('未选择模型，请前往设置页面选择模型。');
-      return;
-    }
+    this._isStreaming = true;
+    this._updateSendButton(true);
 
-    const systemPrompt = this.currentDraft.systemPrompt || '';
-    const historyMessages = this.currentDraft.messages
-      .filter(m => m.role !== 'error')
-      .map(m => ({ role: m.role, content: m.content }));
-
+    // 构建发给 AI 的消息列表
     const messages = [
-      { role: 'system', content: systemPrompt },
-      ...extraMessages,
-      ...historyMessages,
+      { role: 'system', content: draft.systemPrompt || '' },
+      ...draft.messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content })),
     ];
 
-    const maxTokens = this.currentDraft.maxTokens || 4096;
+    // 如果 userContent 不在 messages 末尾（自动分析场景），手动追加
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== userContent) {
+      messages.push({ role: 'user', content: userContent });
+    }
 
     // 创建流式消息占位
-    const aiMsgId = `msg_${Date.now()}`;
-    const aiMsgEl = this._createStreamingMessageEl(aiMsgId);
-    const messagesContainer = document.getElementById('chatMessages');
-
-    const emptyEl = messagesContainer?.querySelector('.card-chat-empty');
+    const streamEl = this._createStreamingMessageEl();
+    const messageList = document.getElementById('messageList');
+    const emptyEl = messageList?.querySelector('.card-chat-empty');
     if (emptyEl) emptyEl.remove();
-    if (messagesContainer) messagesContainer.appendChild(aiMsgEl);
+    messageList?.appendChild(streamEl);
     this.scrollToBottom();
 
-    this._setStreamingState(true);
-    this._abortController = new AbortController();
-    let fullText = '';
+    let finalText = '';
 
     try {
       await AIClient.stream(
         messages,
-        { max_tokens: maxTokens },
+        { max_tokens: draft.maxTokens || 4096 },
         (delta, accumulated) => {
-          fullText = accumulated;
-          const contentEl = aiMsgEl.querySelector('.card-message-content');
+          finalText = accumulated;
+          const contentEl = streamEl.querySelector('.stream-content');
           if (contentEl) {
             contentEl.innerHTML = this._renderMarkdownLite(accumulated) +
               '<span class="streaming-cursor">▋</span>';
+            this._renderMermaidInElement(contentEl);
           }
           this.scrollToBottom();
         },
-        (finalText) => {
-          fullText = finalText;
-          const contentEl = aiMsgEl.querySelector('.card-message-content');
-          if (contentEl) {
-            contentEl.innerHTML = this._renderMarkdownLite(finalText);
-          }
-          // 检测并渲染 Mermaid 图表
-          this._renderMermaidInElement(aiMsgEl);
-
-          const aiMsg = {
-            id: aiMsgId,
-            role: 'assistant',
-            content: finalText,
-            timestamp: Date.now(),
-          };
-          this.currentDraft.messages.push(aiMsg);
-          DraftStorage.update(this.currentDraft.id, { messages: this.currentDraft.messages });
-          this._setStreamingState(false);
+        (text) => {
+          finalText = text;
         }
       );
     } catch (err) {
-      if (err.name === 'AbortError') {
-        const contentEl = aiMsgEl.querySelector('.card-message-content');
-        if (contentEl) {
-          contentEl.innerHTML = this._renderMarkdownLite(fullText) +
-            '<span class="streaming-stopped"> [已停止]</span>';
-        }
-        if (fullText) {
-          const aiMsg = {
-            id: aiMsgId,
-            role: 'assistant',
-            content: fullText + ' [已停止]',
-            timestamp: Date.now(),
-          };
-          this.currentDraft.messages.push(aiMsg);
-          DraftStorage.update(this.currentDraft.id, { messages: this.currentDraft.messages });
-        } else {
-          aiMsgEl.remove();
-        }
-      } else {
-        aiMsgEl.remove();
-        this._appendErrorMessage(`AI 调用失败：${err.message}`);
+      if (err.name !== 'AbortError') {
+        const errMsg = {
+          id: `msg_${Date.now()}`,
+          role: 'error',
+          content: `请求失败：${err.message}`,
+          timestamp: Date.now(),
+        };
+        draft.messages.push(errMsg);
+        DraftStorage.update(draft.id, { messages: draft.messages });
+        streamEl.remove();
+        this._appendMessage(errMsg);
+        this.scrollToBottom();
+        this._isStreaming = false;
+        this._updateSendButton(false);
+        return;
       }
-      this._setStreamingState(false);
     }
+
+    // 流式完成：替换占位元素为正式消息
+    const aiMsg = {
+      id: `msg_${Date.now()}`,
+      role: 'assistant',
+      content: finalText,
+      timestamp: Date.now(),
+    };
+
+    if (finalText) {
+      draft.messages.push(aiMsg);
+      DraftStorage.update(draft.id, { messages: draft.messages });
+    }
+
+    streamEl.remove();
+    if (finalText) {
+      this._appendMessage(aiMsg);
+      this._renderMermaidInElement(
+        messageList?.lastElementChild
+      );
+    }
+
+    this.scrollToBottom();
+    this._isStreaming = false;
+    this._updateSendButton(false);
   },
 
   stopStreaming() {
     if (this._abortController) {
       this._abortController.abort();
-      this._abortController = null;
     }
+    this._isStreaming = false;
+    this._updateSendButton(false);
+
+    // 在流式消息末尾追加停止标记
+    const streamEl = document.querySelector('.card-message-ai.streaming');
+    if (streamEl) {
+      streamEl.classList.remove('streaming');
+      const contentEl = streamEl.querySelector('.stream-content');
+      if (contentEl) {
+        const cursor = contentEl.querySelector('.streaming-cursor');
+        if (cursor) cursor.remove();
+        contentEl.insertAdjacentHTML('beforeend',
+          '<span class="streaming-stopped"> [已停止]</span>');
+      }
+    }
+  },
+
+  _updateSendButton(isStreaming) {
+    const inputArea = document.querySelector('.card-chat-input');
+    if (!inputArea) return;
+
+    const existingBtn = inputArea.querySelector('.btn-stop, #sendBtn');
+    if (existingBtn) existingBtn.remove();
+
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) chatInput.disabled = isStreaming;
+
+    const btn = document.createElement('button');
+    if (isStreaming) {
+      btn.className = 'btn btn-stop';
+      btn.innerHTML = '<i class="ti ti-player-stop"></i> 停止';
+      btn.onclick = () => this.stopStreaming();
+    } else {
+      btn.className = 'btn btn-primary';
+      btn.id = 'sendBtn';
+      btn.innerHTML = '<i class="ti ti-send"></i> 发送';
+      btn.onclick = () => this.sendMessage();
+    }
+    inputArea.appendChild(btn);
+  },
+
+  // ══════════════════════════════════════════
+  // DOM 操作辅助
+  // ══════════════════════════════════════════
+
+  _appendMessage(msg) {
+    const messageList = document.getElementById('messageList');
+    if (!messageList) return;
+    const emptyEl = messageList.querySelector('.card-chat-empty');
+    if (emptyEl) emptyEl.remove();
+    messageList.insertAdjacentHTML('beforeend', this._renderMessageHtml(msg));
+  },
+
+  _renderMessageHtml(msg) {
+    if (msg.role === 'user') {
+      return `
+        <div class="card-message card-message-user" data-msg-id="${msg.id}">
+          ${this._escapeHtml(msg.content)}
+        </div>
+      `;
+    }
+    if (msg.role === 'assistant') {
+      return `
+        <div class="card-message card-message-ai" data-msg-id="${msg.id}">
+          ${this._renderMarkdownLite(msg.content)}
+        </div>
+      `;
+    }
+    if (msg.role === 'error') {
+      return `
+        <div class="card-message card-message-error" data-msg-id="${msg.id}">
+          <i class="ti ti-alert-circle"></i>
+          ${this._escapeHtml(msg.content)}
+        </div>
+      `;
+    }
+    return '';
+  },
+
+  _createStreamingMessageEl() {
+    const div = document.createElement('div');
+    div.className = 'card-message card-message-ai streaming';
+    div.innerHTML = `<div class="stream-content"><span class="streaming-cursor">▋</span></div>`;
+    return div;
+  },
+
+  scrollToBottom() {
+    const messageList = document.getElementById('messageList');
+    if (messageList) {
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+  },
+
+  // ══════════════════════════════════════════
+  // Markdown 渲染
+  // ══════════════════════════════════════════
+
+  _renderMarkdownLite(text) {
+    if (!text) return '';
+
+    // 1. 提取代码块，替换为占位符
+    const codeBlocks = [];
+    let processed = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push({ lang: lang || '', code });
+      return `%%CODEBLOCK_${idx}%%`;
+    });
+
+    // 2. 转义 HTML（非代码块部分）
+    processed = processed
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+        // 3. 行内规则
+    processed = processed
+      // 行内代码
+      .replace(/`([^`]+)`/g, '<code class="msg-code-inline">$1</code>')
+      // 加粗
+      .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+      // 斜体
+      .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+    // 4. 标题
+    processed = processed
+      .replace(/^### (.+)$/gm, '<h4 class="msg-heading">$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3 class="msg-heading">$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2 class="msg-heading">$1</h2>');
+
+    // 5. 无序列表
+    processed = processed.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
+    processed = processed.replace(
+      /(<li>[\s\S]*?<\/li>)(\n<li>[\s\S]*?<\/li>)*/g,
+      match => `<ul class="msg-list">${match}</ul>`
+    );
+
+    // 6. 换行
+    processed = processed.replace(/\n/g, '<br>');
+
+    // 7. 还原代码块
+    processed = processed.replace(/%%CODEBLOCK_(\d+)%%/g, (_, idx) => {
+      const { lang, code } = codeBlocks[parseInt(idx)];
+      const escapedCode = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<pre class="msg-code-block" data-lang="${lang}"><code>${escapedCode}</code></pre>`;
+    });
+
+    return processed;
   },
 
   // ══════════════════════════════════════════
@@ -980,27 +1270,15 @@ const CardWorkshop = {
   // ══════════════════════════════════════════
 
   async _renderMermaidInElement(el) {
-    // 查找消息中的 mermaid 代码块
-    const codeBlocks = el.querySelectorAll('pre.msg-code-block code');
-    let hasMermaid = false;
+    if (!el) return;
+    const mermaidBlocks = el.querySelectorAll('pre.msg-code-block[data-lang="mermaid"]');
+    if (mermaidBlocks.length === 0) return;
 
-    codeBlocks.forEach(block => {
-      const pre = block.parentElement;
-      if (pre.dataset.lang === 'mermaid') hasMermaid = true;
-    });
-
-    // 同时检查原始文本中是否有 ```mermaid
-    const content = el.querySelector('.card-message-content')?.innerHTML || '';
-    if (!content.includes('mermaid') && !hasMermaid) return;
-
-    // 动态加载 Mermaid.js
     await this._loadMermaid();
 
-    // 找到所有 mermaid 代码块并替换为图表
-    el.querySelectorAll('pre.msg-code-block[data-lang="mermaid"]').forEach(async (pre) => {
+    mermaidBlocks.forEach(async (pre) => {
       const code = pre.querySelector('code')?.textContent || '';
       if (!code.trim()) return;
-
       try {
         const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         const { svg } = await window.mermaid.render(id, code.trim());
@@ -1009,7 +1287,6 @@ const CardWorkshop = {
         wrapper.innerHTML = svg;
         pre.replaceWith(wrapper);
       } catch (e) {
-        // 渲染失败保留原始代码块
         console.warn('Mermaid render failed:', e);
       }
     });
@@ -1037,64 +1314,6 @@ const CardWorkshop = {
   },
 
   // ══════════════════════════════════════════
-  // DOM 操作辅助
-  // ══════════════════════════════════════════
-
-  _appendMessage(msg) {
-    const container = document.getElementById('chatMessages');
-    if (!container) return;
-    const emptyEl = container.querySelector('.card-chat-empty');
-    if (emptyEl) emptyEl.remove();
-    container.insertAdjacentHTML('beforeend', this.renderMessage(msg));
-  },
-
-  _appendErrorMessage(text) {
-    const errMsg = {
-      id: `err_${Date.now()}`,
-      role: 'error',
-      content: text,
-      timestamp: Date.now(),
-    };
-    this._appendMessage(errMsg);
-    this.scrollToBottom();
-  },
-
-  _createStreamingMessageEl(id) {
-    const div = document.createElement('div');
-    div.className = 'card-message card-message-ai';
-    div.dataset.messageId = id;
-    div.innerHTML = `<div class="card-message-content"><span class="streaming-cursor">▋</span></div>`;
-    return div;
-  },
-
-  _setStreamingState(isStreaming) {
-    this._isStreaming = isStreaming;
-    const sendBtn = document.getElementById('sendBtn');
-    const chatInput = document.getElementById('chatInput');
-    if (!sendBtn) return;
-
-    if (isStreaming) {
-      sendBtn.innerHTML = `<i class="ti ti-player-stop"></i> 停止`;
-      sendBtn.classList.add('btn-stop');
-      sendBtn.classList.remove('btn-primary');
-      if (chatInput) chatInput.disabled = true;
-    } else {
-      sendBtn.innerHTML = `<i class="ti ti-send"></i> 发送`;
-      sendBtn.classList.remove('btn-stop');
-      sendBtn.classList.add('btn-primary');
-      if (chatInput) {
-        chatInput.disabled = false;
-        chatInput.focus();
-      }
-    }
-  },
-
-  scrollToBottom() {
-    const container = document.getElementById('chatMessages');
-    if (container) container.scrollTop = container.scrollHeight;
-  },
-
-  // ══════════════════════════════════════════
   // 工具函数
   // ══════════════════════════════════════════
 
@@ -1106,57 +1325,6 @@ const CardWorkshop = {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-  },
-
-  _renderMarkdownLite(text) {
-    if (!text) return '';
-    // 先提取代码块，避免内部内容被其他规则处理
-    const codeBlocks = [];
-    let html = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-      const idx = codeBlocks.length;
-      codeBlocks.push({ lang: lang || '', code: code.trim() });
-      return `%%CODEBLOCK_${idx}%%`;
-    });
-
-    // 转义 HTML（非代码块部分）
-    html = html
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // 行内代码
-    html = html.replace(/`([^`]+)`/g, '<code class="msg-code-inline">\$1</code>');
-
-    // 加粗
-    html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>\$1</strong>');
-
-    // 斜体
-    html = html.replace(/\*([^*\n]+)\*/g, '<em>\$1</em>');
-
-    // 标题
-    html = html.replace(/^### (.+)$/gm, '<h4 class="msg-heading">$1</h4>');
-    html = html.replace(/^## (.+)$/gm, '<h3 class="msg-heading">$1</h3>');
-    html = html.replace(/^# (.+)$/gm, '<h2 class="msg-heading">$1</h2>');
-
-    // 无序列表（连续的 li 包裹进 ul）
-    html = html.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/(<li>[\s\S]*?<\/li>)(\n<li>[\s\S]*?<\/li>)*/g,
-      match => `<ul class="msg-list">${match}</ul>`);
-
-    // 换行
-    html = html.replace(/\n/g, '<br>');
-
-    // 还原代码块
-    html = html.replace(/%%CODEBLOCK_(\d+)%%/g, (_, idx) => {
-      const { lang, code } = codeBlocks[parseInt(idx)];
-      const escapedCode = code
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      return `<pre class="msg-code-block" data-lang="${lang}"><code>${escapedCode}</code></pre>`;
-    });
-
-    return html;
   },
 
   _showToast(message, duration = 2500) {
@@ -1178,6 +1346,7 @@ const CardWorkshop = {
       setTimeout(() => toast.remove(), 300);
     }, duration);
   },
+
 };
 
 // ─── 注册路由 ───
@@ -1188,5 +1357,9 @@ if (typeof Router !== 'undefined') {
   });
 }
 /* ═══ END: CardWorkshop ═══ */
+
+      
+
+
 
 

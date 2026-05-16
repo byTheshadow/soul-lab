@@ -708,6 +708,9 @@
   border-radius: var(--radius-lg);
   line-height: 1.6;
   font-size: var(--text-md);
+  /* 让消息内的文字可以被选中 */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .card-message-user {
@@ -920,6 +923,94 @@
   transform: translateX(-50%) translateY(0);
 }
 
+/* ═══════════════════════════════════════════
+   划词工具条
+   ═══════════════════════════════════════════ */
+
+.selection-toolbar {
+  position: fixed;
+  z-index: 8000;
+  display: flex;
+  align-items: center;
+  background: var(--c-text);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  /* 初始隐藏状态 */
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
+}
+
+.selection-toolbar.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+/* 工具条按钮 */
+.selection-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  color: var(--c-bg);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  /* 触摸目标足够大 */
+    min-height: 36px;
+}
+
+.selection-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.selection-toolbar-btn:active {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.selection-toolbar-btn i {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* 两个按钮之间的分隔线 */
+.selection-toolbar-divider {
+  width: 0.5px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+}
+
+/* 工具条小箭头（朝下，指向选区） */
+.selection-toolbar::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--c-text);
+}
+
+/* 工具条出现在选区下方时，箭头朝上 */
+.selection-toolbar.toolbar-below::after {
+  bottom: auto;
+  top: -5px;
+  border-top: none;
+  border-bottom: 5px solid var(--c-text);
+}
+
 /* ─── 响应式：手机端 ─── */
 @media (max-width: 768px) {
   .card-topbar {
@@ -1015,6 +1106,12 @@
 
   .card-chat-input {
     padding: var(--sp-md);
+  }
+
+  /* 移动端工具条按钮稍大，方便触摸 */
+  .selection-toolbar-btn {
+    padding: 10px 16px;
+    min-height: 44px;
   }
 }
 
